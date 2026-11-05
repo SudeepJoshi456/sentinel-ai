@@ -1,7 +1,9 @@
-# SentinelAI   https://sentinel-ai-seven-nu.vercel.app/
+
+# 🛡️ SentinelAI
 
 ### AI-Driven Security Orchestration, Automation, and Response (SOAR)
 
+🌐 **[Live Demo](https://sentinel-ai-seven-nu.vercel.app/)** 
 **SentinelAI** is a class project that explores how artificial intelligence can help security teams review, prioritize, and respond to cybersecurity incidents. Our goal is to combine incident classification, intelligent response recommendations, and analyst feedback in a single, easy-to-use dashboard.
 
 The current version is an **interactive prototype** built with Next.js. It demonstrates the incident-response workflow using simulated security events and rule-based classification. Real LLM integration, contextual-bandit learning, and production security-tool integrations are planned for future phases.
