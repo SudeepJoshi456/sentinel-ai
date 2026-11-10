@@ -4,7 +4,7 @@ import { ChevronRight } from "lucide-react";
 import type { Ticket } from "@/lib/types";
 import { useSimulation } from "@/lib/simulation";
 import { relativeTime } from "@/lib/format";
-import { CategoryPill, DecisionPill, SeverityPill } from "./Pill";
+import { CategoryPill, DecisionPill, GuardrailTag, SeverityPill } from "./Pill";
 import { SourceTag } from "./SourceTag";
 
 const TH = "px-3 py-2.5 text-left text-[10.5px] font-semibold tracking-[0.08em] text-muted uppercase";
@@ -58,8 +58,9 @@ export function TicketTable({ tickets, emptyLabel = "No tickets match the curren
               <div className="truncate text-[13px] text-ink" title={t.description}>
                 {t.description}
               </div>
-              <div className="mt-1">
+              <div className="mt-1 flex min-w-0 items-center gap-2">
                 <SourceTag source={t.source} />
+                {t.guardrail && <GuardrailTag kind={t.guardrail} />}
               </div>
             </td>
             <td className="px-3 py-3.5 align-middle">

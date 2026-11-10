@@ -1,10 +1,11 @@
 "use client";
 
+import { ShieldAlert } from "lucide-react";
 import { CURRENT_USER, useSimulation } from "@/lib/simulation";
 import { greeting, utcClock } from "@/lib/format";
 
 export function TopBar({ title, subtitle }: { title?: string; subtitle?: string }) {
-  const { now, paused, togglePaused } = useSimulation();
+  const { now, paused, togglePaused, stats, openTicket } = useSimulation();
 
   return (
     <header className="flex flex-wrap items-center justify-between gap-4">
@@ -18,6 +19,17 @@ export function TopBar({ title, subtitle }: { title?: string; subtitle?: string 
       </div>
 
       <div className="flex items-center gap-4">
+        {stats.pendingApprovals.length > 0 && (
+          <button
+            type="button"
+            onClick={() => openTicket(stats.pendingApprovals[0].id)}
+            title="Open the oldest ticket awaiting approval"
+            className="animate-fade-in flex items-center gap-2 rounded-full bg-sev-amber/12 px-3 py-1.5 text-[11px] font-bold tracking-[0.06em] text-sev-amber ring-1 ring-sev-amber/35 transition-colors hover:bg-sev-amber/20"
+          >
+            <ShieldAlert className="size-3.5" />
+            {stats.pendingApprovals.length} AWAITING APPROVAL
+          </button>
+        )}
         <button
           type="button"
           onClick={togglePaused}

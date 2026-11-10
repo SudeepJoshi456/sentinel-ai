@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, CircleHelp } from "lucide-react";
+import { Check, CircleHelp, X } from "lucide-react";
 import { useSimulation } from "@/lib/simulation";
 import { relativeTime } from "@/lib/format";
 import type { ActionLogEntry } from "@/lib/types";
@@ -33,11 +33,11 @@ export function ActionLog({ limit = 5 }: { limit?: number }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-[15px] font-semibold text-ink">Action log</h2>
-          <p className="mt-1 text-[12.5px] text-muted">Latest automated responses</p>
+          <p className="mt-1 text-[12.5px] text-muted">Latest automated responses · simulated execution</p>
         </div>
         <span
           className="text-subtle hover:text-muted"
-          title="Response actions chosen by the contextual bandit policy. Analyst entries show human overrides, escalations and feedback."
+          title="Response actions chosen by the contextual bandit policy and run through mock connectors (no live systems are changed). Analyst entries show approvals, escalations and feedback."
         >
           <CircleHelp className="size-4" />
         </span>
@@ -52,11 +52,22 @@ export function ActionLog({ limit = 5 }: { limit?: number }) {
               highlighted.has(a.ticketId) ? "animate-slide-down bg-accent/[0.05]" : ""
             }`}
           >
-            <div className="grid size-7 shrink-0 place-items-center rounded-full bg-sev-green/12 ring-1 ring-sev-green/25">
-              <Check className="size-3.5 text-sev-green" strokeWidth={3} />
-            </div>
+            {a.execution?.status === "failed" ? (
+              <div className="grid size-7 shrink-0 place-items-center rounded-full bg-sev-red/12 ring-1 ring-sev-red/25">
+                <X className="size-3.5 text-sev-red" strokeWidth={3} />
+              </div>
+            ) : (
+              <div className="grid size-7 shrink-0 place-items-center rounded-full bg-sev-green/12 ring-1 ring-sev-green/25">
+                <Check className="size-3.5 text-sev-green" strokeWidth={3} />
+              </div>
+            )}
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[13px] font-medium text-ink">{a.name}</div>
+              <div className="flex items-center gap-1.5">
+                <span className="truncate text-[13px] font-medium text-ink">{a.name}</span>
+                {a.execution?.status === "retried" && (
+                  <span className="shrink-0 rounded bg-sev-amber/12 px-1 text-[9.5px] font-semibold text-sev-amber">RETRIED</span>
+                )}
+              </div>
               <div className="truncate font-mono text-[11px] text-muted">{a.detail}</div>
             </div>
             <div className="flex shrink-0 flex-col items-end gap-1.5">

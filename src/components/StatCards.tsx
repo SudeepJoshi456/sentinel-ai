@@ -26,8 +26,9 @@ function StatCard({ label, value, trend, trendSuffix = "%", caption, icon: Icon 
         <span key={value} className="animate-count-bump text-[30px] font-bold tracking-tight text-ink tabular-nums">
           {value}
         </span>
-        <span className="text-[12px] font-semibold text-sev-green tabular-nums">
-          ▲ +{trend.toFixed(1)}
+        <span className={`text-[12px] font-semibold tabular-nums ${trend >= 0 ? "text-sev-green" : "text-sev-red"}`}>
+          {trend >= 0 ? "▲ +" : "▼ "}
+          {trend.toFixed(1)}
           {trendSuffix}
         </span>
       </div>
@@ -65,7 +66,8 @@ export function StatCards() {
         label="Model Reward Score"
         value={`${stats.rewardScore.toFixed(1)}%`}
         trend={stats.trends.reward}
-        caption="Bandit policy, this session"
+        trendSuffix=" pts"
+        caption="vs. fixed playbook · last 50 decisions"
         icon={Target}
       />
     </section>

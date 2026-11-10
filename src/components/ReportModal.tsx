@@ -1,16 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bot, Check, LoaderCircle, Send, Sparkles, X } from "lucide-react";
+import { Bot, Check, LoaderCircle, Send, ShieldAlert, Sparkles, X } from "lucide-react";
 import { CURRENT_USER, useSimulation } from "@/lib/simulation";
-import { classifyReport, type Classification } from "@/lib/classifier";
+import { triageReport, type TriageResult } from "@/lib/triage";
+import { ACTIONS } from "@/lib/bandit";
+import { MAX_REPORT_CHARS } from "@/lib/security";
+import type { Ticket } from "@/lib/types";
 import { CategoryPill, DecisionPill, SeverityPill } from "./Pill";
 
 type Phase = "idle" | "classifying" | "selecting" | "done";
 
-const CLASSIFY_MS = 950;
+const MIN_CLASSIFY_MS = 950;
 const SELECT_MS = 850;
-const CLOSE_AFTER_MS = 900;
+const CLOSE_AFTER_MS = 1000;
+const CLOSE_AFTER_FLAGGED_MS = 2200;
 
 const SUGGESTIONS = [
   "I got a weird email asking me to reset my password from an unfamiliar address",
@@ -43,20 +47,27 @@ export function ReportModal() {
   return <ReportModalBody onClose={() => setReportOpen(false)} submitReport={submitReport} />;
 }
 
-function ReportModalBody({ onClose, submitReport }: { onClose: () => void; submitReport: (text: string) => { id: string } }) {
+type SubmitFn = ReturnType<typeof useSimulation>["submitReport"];
+
+function ReportModalBody({ onClose, submitReport }: { onClose: () => void; submitReport: SubmitFn }) {
   const [text, setText] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [submitted, setSubmitted] = useState("");
-  const [result, setResult] = useState<Classification | null>(null);
-  const [ticketId, setTicketId] = useState<string | null>(null);
+  const [result, setResult] = useState<TriageResult | null>(null);
+  const [ticket, setTicket] = useState<Ticket | null>(null);
   const timers = useRef<number[]>([]);
+  const mounted = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const busy = phase !== "idle";
 
   useEffect(() => {
+    mounted.current = true;
     inputRef.current?.focus();
     const pending = timers.current;
-    return () => pending.forEach((t) => window.clearTimeout(t));
+    return () => {
+      mounted.current = false;
+      pending.forEach((t) => window.clearTimeout(t));
+    };
   }, []);
 
   useEffect(() => {
@@ -69,19 +80,31 @@ function ReportModalBody({ onClose, submitReport }: { onClose: () => void; submi
 
   const later = (fn: () => void, ms: number) => timers.current.push(window.setTimeout(fn, ms));
 
-  const submit = () => {
+  const submit = async () => {
     const value = text.trim();
     if (!value || busy) return;
     setSubmitted(value);
     setText("");
-    setResult(classifyReport(value, "Marcus Chen"));
     setPhase("classifying");
-    later(() => setPhase("selecting"), CLASSIFY_MS);
+
+    const [triage] = await Promise.all([triageReport(value), new Promise((r) => setTimeout(r, MIN_CLASSIFY_MS))]);
+    if (!mounted.current) return;
+    setResult(triage);
+    setPhase("selecting");
+
     later(() => {
-      setTicketId(submitReport(value).id);
+      const created = submitReport(triage.text, triage.classification, triage.inputFlags);
+      setTicket(created);
       setPhase("done");
-    }, CLASSIFY_MS + SELECT_MS);
-    later(onClose, CLASSIFY_MS + SELECT_MS + CLOSE_AFTER_MS);
+      const needsAttention = created.decision === "PENDING APPROVAL" || created.inputFlags;
+      later(onClose, needsAttention ? CLOSE_AFTER_FLAGGED_MS : CLOSE_AFTER_MS);
+    }, SELECT_MS);
+  };
+
+  const classifierNote = (r: TriageResult) => {
+    const c = r.classification;
+    if (c.source === "llm" && c.llm) return `${c.llm.model} · ${c.llm.latencyMs} ms`;
+    return `offline rules${c.fallbackReason ? ` (LLM ${c.fallbackReason})` : ""}`;
   };
 
   const stepState = (step: 0 | 1 | 2): "pending" | "active" | "done" => {
@@ -152,7 +175,7 @@ function ReportModalBody({ onClose, submitReport }: { onClose: () => void; submi
             </div>
           )}
 
-          {submitted && result && (
+          {submitted && (
             <div className="animate-pop-in flex max-w-[92%] items-start gap-2.5">
               <div className="grid size-7 shrink-0 place-items-center rounded-full bg-accent/12">
                 <Sparkles className="size-3.5 text-accent" />
@@ -162,29 +185,52 @@ function ReportModalBody({ onClose, submitReport }: { onClose: () => void; submi
                   state={stepState(0)}
                   label="LLM classifying report…"
                   doneLabel={
-                    <span className="flex flex-wrap items-center gap-1.5 text-ink">
-                      Classified as <CategoryPill value={result.category} /> <SeverityPill value={result.severity} />
-                      <span className="text-[12px] text-muted tabular-nums">{result.confidence.toFixed(1)}% confidence</span>
-                    </span>
+                    result && (
+                      <span className="flex flex-col gap-1">
+                        <span className="flex flex-wrap items-center gap-1.5 text-ink">
+                          Classified as <CategoryPill value={result.classification.category} />{" "}
+                          <SeverityPill value={result.classification.severity} />
+                          <span className="text-[12px] text-muted tabular-nums">
+                            {result.classification.confidence.toFixed(1)}% confidence
+                          </span>
+                        </span>
+                        <span className="text-[11px] text-subtle">via {classifierNote(result)}</span>
+                        {result.inputFlags.length > 0 && (
+                          <span className="flex items-start gap-1.5 text-[12px] text-sev-red">
+                            <ShieldAlert className="mt-0.5 size-3.5 shrink-0" />
+                            Untrusted input flagged ({result.inputFlags.join(", ")}) — treated as data, automation blocked.
+                          </span>
+                        )}
+                      </span>
+                    )
                   }
                 />
                 <StepRow
                   state={stepState(1)}
                   label="Bandit selecting action…"
                   doneLabel={
-                    <span className="flex flex-wrap items-center gap-1.5 text-ink">
-                      <span className="font-medium">{result.actionName}</span> <DecisionPill value={result.decision} />
-                      <span className="text-[12px] text-muted tabular-nums">reward {result.expectedReward.toFixed(2)}</span>
-                    </span>
+                    ticket && (
+                      <span className="flex flex-wrap items-center gap-1.5 text-ink">
+                        <span className="font-medium">{ACTIONS[ticket.actionId].label}</span> <DecisionPill value={ticket.decision} />
+                        <span className="text-[12px] text-muted tabular-nums">
+                          est. reward {(ticket.arms.find((a) => a.actionId === ticket.actionId)?.mean ?? 0).toFixed(2)}
+                        </span>
+                      </span>
+                    )
                   }
                 />
                 <StepRow
                   state={stepState(2)}
                   label="Creating ticket…"
                   doneLabel={
-                    <span className="text-ink">
-                      Ticket <span className="font-mono font-semibold text-accent">{ticketId}</span> added to the live feed
-                    </span>
+                    ticket && (
+                      <span className="text-ink">
+                        Ticket <span className="font-mono font-semibold text-accent">{ticket.id}</span>{" "}
+                        {ticket.decision === "PENDING APPROVAL"
+                          ? "is waiting for your approval — open it in the feed to approve."
+                          : "added to the live feed."}
+                      </span>
+                    )
                   }
                 />
               </div>
